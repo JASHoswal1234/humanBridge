@@ -1,6 +1,6 @@
 # Optional Render deployment
 
-The local installation remains available independently of Render. One native Python web service builds Vite and serves the bundle, API, document routes and payment callbacks. The optional Blueprint proposes Starter compute and a 1 GB disk. A paid service is necessary to attach a disk. Review the dashboard's compute and storage charges before authorizing provisioning. [Render persistent disks](https://render.com/docs/disks) · [Current pricing](https://render.com/pricing)
+The local installation remains available independently of Render. One native Python web service builds Vite and serves the bundle, API, document routes and payment callbacks. The optional Blueprint proposes Starter compute and a 1 GB disk. A paid service is necessary to attach a disk. The published entry compute price of USD 7/month plus USD 0.25/GB-month gives an indicative USD 7.25/month before taxes, usage or other charges. Review the dashboard's compute and storage charges before authorizing provisioning. [Render persistent disks](https://render.com/docs/disks) · [Current pricing](https://render.com/pricing)
 
 ## Dashboard steps
 
