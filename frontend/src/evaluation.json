@@ -1,0 +1,63 @@
+{
+  "receipts": 6,
+  "paired_matches": 6,
+  "seed": 4317,
+  "review_source": "AI-assisted visual transcription",
+  "policies": [
+    {
+      "policy": "AI only",
+      "cases": [],
+      "initial_errors": 0,
+      "errors_detected": 0,
+      "errors_corrected": 0,
+      "errors_introduced": 0,
+      "reviews": 0,
+      "abstentions": 0,
+      "estimated_spend_usd": "0.00",
+      "corrected_per_review": null
+    },
+    {
+      "policy": "Random",
+      "cases": [],
+      "initial_errors": 0,
+      "errors_detected": 0,
+      "errors_corrected": 0,
+      "errors_introduced": 0,
+      "reviews": 0,
+      "abstentions": 0,
+      "estimated_spend_usd": "0.00",
+      "corrected_per_review": null
+    },
+    {
+      "policy": "Full",
+      "cases": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F"
+      ],
+      "initial_errors": 0,
+      "errors_detected": 0,
+      "errors_corrected": 0,
+      "errors_introduced": 0,
+      "reviews": 6,
+      "abstentions": 2,
+      "estimated_spend_usd": "4.50",
+      "corrected_per_review": 0.0
+    },
+    {
+      "policy": "Selective",
+      "cases": [],
+      "initial_errors": 0,
+      "errors_detected": 0,
+      "errors_corrected": 0,
+      "errors_introduced": 0,
+      "reviews": 0,
+      "abstentions": 0,
+      "estimated_spend_usd": "0.00",
+      "corrected_per_review": null
+    }
+  ]
+}

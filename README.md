@@ -1,112 +1,73 @@
-# HumanBridge — PayPal AI Hackathon MVP
+# HumanBridge
 
-**When AI is uncertain, buy a second opinion.** A document extraction agent flags uncertain receipt totals, creates a narrow human review task, and charges only requester-accepted review work through PayPal Sandbox authorization and final capture.
+HumanBridge reads a receipt twice with Gemini, tells a requester which values need another look, and lets them authorize a budget for a verification service. The requester sees the original readings and the reviewer's answer before deciding whether to pay. The application uses PayPal Sandbox.
 
-> Prototype status: working app code, locally tested backend endpoints and frontend build. Real PayPal checkout and Gemini calls require YOUR credentials and have not been executed by the authoring environment. Your earlier stand-alone smoke test verified $5 authorization, $2.25 single final capture and void using your Sandbox account.
+## Run the judge demo locally
 
-## Prerequisites
-- Python 3.10+
-- Node.js 20+
-- Sandbox Business app Client ID and Secret (from developer.paypal.com)
-- Sandbox Personal account for checkout approval
-- Optional: Gemini API key for real receipt analysis
-
-## 1. Backend (PowerShell)
+Use Windows PowerShell, Python 3.10 or 3.11, Node 22, npm and Chrome. Start in an empty parent directory.
 
 ```powershell
-cd backend
+git clone https://github.com/JASHoswal1234/humanBridge.git
+cd humanBridge
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-Copy-Item .env.example .env
-# Edit backend/.env with PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, GEMINI_API_KEY
-python -m uvicorn api:app --reload --port 8000
+.\.venv\Scripts\python.exe -m pip install -r backend/requirements.txt
+npm.cmd --prefix frontend ci
+npm.cmd --prefix frontend run build
+Copy-Item backend/.env.example backend/.env
 ```
 
-API health at `http://127.0.0.1:8000/api/health`.
-
-## 2. Frontend (new PowerShell terminal)
+For an existing checkout, keep its existing private environment file. Set GEMINI_API_KEY and GEMINI_MODEL in backend/.env. Enter a Sandbox merchant app's PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET there. Use a separate personal Sandbox buyer for approval. Credentials belong on the server. Scripted examples and deterministic tests work without provider keys.
 
 ```powershell
-cd frontend
-npm install
-npm run dev
+.\.venv\Scripts\python.exe -m uvicorn api:app --app-dir backend --host 127.0.0.1 --port 8000 --workers 1 --no-access-log
 ```
 
-Open **http://127.0.0.1:5173**.
+Open http://127.0.0.1:8000 in the same browser throughout. FastAPI serves the compiled frontend, relative API URLs and PayPal callbacks on that origin. Local storage defaults to backend/data. Keep this directory and your original browser profile to revisit a batch. Rebuild before restarting the server after UI edits.
 
-## 3. Functional walkthrough
+1. Choose **New live batch**. Download the synthetic sample from the empty upload panel or use [synthetic receipt A](evaluation/A.png). Upload it and choose **Analyze**.
+2. Compare both Gemini readings and the printed receipt. Review is conditional. When no check fires, explain the result and finish without checkout. For a live example with a genuinely obscured component, try the [synthetic folded receipt](evaluation/challenge/fold.png). Both recorded totals were correct, but the readings disagreed on subtotal. A new run can differ. **Load scripted demo** is a separate walkthrough.
+3. For a flagged batch create the USD 5 authorization order. Open Sandbox checkout, approve as the buyer, return to the same origin and follow the authorization control. The backend verifies the order with PayPal.
+4. Open the reviewer task, inspect its image crop, submit a value and return to the requester tab. Compare the evidence, request revision or accept. A conflicting correction requires an explanation. Acceptance approves the service fee.
+5. Confirm final capture for accepted work. The server reads back the capture result. If no work was accepted, use the available void action once remaining tasks are resolved. Refresh to inspect persisted settlement.
 
-1. Click **Load scripted demo**. This creates four synthetic receipt images with **pre-scripted extraction results**; no Gemini API call occurs and the UI labels this clearly. Three are flagged for total review.
-2. Click **Create $5 authorization order**. PayPal Sandbox checkout opens in a new tab.
-3. Approve with your *Sandbox Personal* account; landing on `example.com/return` is expected (the backend uses the return URL from the tested smoke script).
-4. Return to the HumanBridge app. Click **I've approved — verify & authorize**. Backend checks order state with PayPal and invokes authorize.
-5. Open each reviewer link in a second tab. Review the bottom-region crop and submit the correct total (e.g. $32.40 for North Stationery, $19.80 for Blue Bicycle, $22.00 for Harbour Grocery).
-6. Back in requester tab, click **Refresh**, then **Accept** each submitted review. Alternatively **Skip** a task to avoid paying for that review.
-7. Click **Capture $2.25 (final)** (if all three accepted), or lower if some skipped. Backend does a *single final* partial capture and reads back capture status and amount. If all skipped it voids the unused authorization.
-8. Inspect PayPal IDs and the audit trail.
+## Architecture
 
-For a **live Gemini demo**, click **New live batch**, upload 1–4 receipt images and set GEMINI_API_KEY. The two readings and validators are real, but not guaranteed independent, accurate or calibrated. A clearly readable receipt may generate **zero** review tasks; use an ambiguous image to test escalation.
+```mermaid
+flowchart LR
+  Requester -->|same origin| API[FastAPI + React build]
+  Reviewer -->|task capability and crop| API
+  API -->|two image readings| Gemini
+  API -->|readings, rules, tasks and ledger| SQLite
+  API -->|protected originals and crops| Disk
+  API -->|Orders v2 + Payments v2| Sandbox[PayPal Sandbox]
+  Requester -->|buyer approval| Sandbox
+```
 
-## API routes
+Gemini extracts schema-validated fields. Missing values stay missing. Deterministic rules compare total, merchant, dates, line items and arithmetic, including explicit discounts. The same model can repeat an error. Rule agreement supplies no calibrated probability. [Evaluation and reproduction](evaluation/README.md)
 
-| Method | Route | Purpose |
-|---|---|---|
-| GET | `/api/health` | Health check |
-| GET | `/api/config` | Client-safe enabled features (no secrets) |
-| POST | `/api/batches/demo` | Scripted synthetic demo batch |
-| POST | `/api/batches` | Empty live batch |
-| POST | `/api/batches/{id}/documents` | Upload image and run Gemini |
-| GET | `/api/batches/{id}` | Full batch state |
-| POST | `/api/batches/{id}/payment/create` | Create PayPal AUTHORIZE order |
-| POST | `/api/batches/{id}/payment/authorize` | Verify buyer approval and authorize |
-| GET | `/api/tasks/{id}?token=...` | Reviewer task info |
-| POST | `/api/tasks/{id}/submit` | Submit reviewed total |
-| POST | `/api/batches/{id}/tasks/{task_id}/accept` | Requester accepts work |
-| POST | `/api/batches/{id}/tasks/{task_id}/skip` | Requester skips work |
-| POST | `/api/batches/{id}/payment/settle` | Final capture of accepted work, or void |
+The backend creates an AUTHORIZE order, verifies buyer approval, authorizes USD 5 and checks the authorization against the order. It calculates fees in integer cents, uses stable request identifiers and requests one final capture up to the accepted amount and budget. The configured verification-service merchant receives the payment. The earlier completed app run captured **USD 0.75**. A local checkout starts with a fresh ledger. [Sanitized evidence](docs/PROJECT_STATUS.md)
 
-## Architecture and claims
+## Verify the installation
 
-- `backend/api.py`: FastAPI routes, SQLite state and payment lifecycle
-- `backend/paypal_client.py`: Sandbox-only REST implementation and stable request IDs
-- `backend/ai_engine.py`: Gemini extraction with Pydantic schema, transparent rules for disagreement/arithmetic
-- `backend/demo_data.py`: Synthetic receipt generator and **explicitly simulated** readings
-- `frontend/`: React, Vite, CSS frontend
-- Data: local SQLite and images under `backend/data/`, ignored by Git
-
-**Payment:** the configured Sandbox merchant receives the captured amount. This is a fixed verification provider model, **not** peer-to-peer worker payout or escrow. HumanBridge enforces the application-level budget; the PayPal authorization itself is not claimed as a cryptographically strict or absolute merchant spend cap. The amount not captured is **not** claimed to have been released instantly.
-
-**AI:** Two reads from one Gemini model are correlated; consistency checks are not proof of correctness. Human requester acceptance is required before capture. The demo batch uses scripted values to verify workflow functionality, not to claim real AI accuracy. The bottom-region crop is only a heuristic and is **not** a PII guarantee.
-
-## Security and deployment limitations
-
-**Sandbox and demonstration use only.** The app intentionally does not implement requester authentication, reviewer identity verification, multi-tenant access control, webhook signature verification, production monitoring, or secure sensitive-data retention. Do **not** deploy it for real customer documents or live payments. The reviewer URLs contain bearer tokens, but uploaded images are served without access control, so use only synthetic/non-sensitive test images. Add authentication, private image access, background jobs, atomic state locks, and privacy controls before any production use.
-
-On public hosted demos, keep *all* checkout credentials in Sandbox and use synthetic receipts only. A `dist/` build is optionally served by FastAPI from the same origin for deployment.
-
-## First tests
+From the repository root, with Chrome installed, add the venv to this shell's PATH so the integration harness uses the same Python as the server.
 
 ```powershell
-cd backend
+$env:Path = (Resolve-Path .venv/Scripts).Path + ';' + $env:Path
+Push-Location backend
 python -m pytest -q
+Pop-Location
+Push-Location frontend
+npm.cmd test
+npm.cmd run build
+node tests/settlement.mjs
+Pop-Location
+python evaluation/benchmark.py score --human evaluation/human.json
 ```
 
-## Official docs
+The backend and browser suites use controlled provider responses. The settlement journey exercises real HTTP, cookie permissions, React and SQLite. An optional independent check, `node tests/live-gemini.mjs` from frontend, makes two real Gemini calls on the synthetic sample and compares persisted responses after refresh.
 
-- [PayPal authorize and capture](https://developer.paypal.com/checkout/delay-capture/)
-- [PayPal Orders v2](https://developer.paypal.com/api/orders/v2/)
-- [Google Gen AI Python SDK](https://googleapis.github.io/python-genai/)
+## Security and operation
 
-## Hackathon submission checklist
+Use synthetic or non-sensitive receipts. Images travel to Gemini. Batch-owner cookies are HttpOnly and path scoped. Reviewer capabilities give access to one task and its crop. Anyone with a reviewer link can use it. HTTPS deployments set Secure cookies. Do not share browser profiles, reviewer links, databases, private environment files or checkout recordings containing buyer details. Access logging is disabled in the documented start command. This prototype has no account recovery, public quota control or automated retention policy. Set a provider quota and monitor use before distributing a public URL. Keep a single service instance on a persistent disk. Two sequential model calls with retries can take several minutes.
 
-- [ ] Live Gemini example works on a real test receipt
-- [ ] Local end-to-end Sandbox checkout works
-- [ ] Reviewer correction and acceptance verified
-- [ ] PayPal final capture and optional zero-cost void verified
-- [ ] Fair evaluation of AI-only, random, full and selective review completed and published
-- [ ] README updated with actual outputs/screenshots
-- [ ] Hosted demo or complete clean-setup instructions
-- [ ] Public repository with LICENSE
-- [ ] Public YouTube demo under three minutes
-- [ ] Submission completed before deadline
+[Render deployment and smoke test](docs/RENDER.md) · [Demo script and recording checklist](docs/DEMO_VIDEO.md) · [Project evidence](docs/PROJECT_STATUS.md) · [MIT license](LICENSE)
