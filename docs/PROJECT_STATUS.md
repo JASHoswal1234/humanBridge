@@ -136,3 +136,17 @@ A genuine two-pass Gemini check on a non-sensitive reconstruction of the INR rec
 **Release materials.** Root README with architecture and clean setup; root MIT license; private-variable template; optional Render Blueprint and dashboard runbook; timed 2:45 narration and recording checklist; [desktop](evidence/phase4-desktop.png) and [mobile](evidence/phase4-mobile.png) product screenshots. Use the printed fold fixture for conditional review. The original historical discount batch remains evidence of a service payment even though the accepted correction differed from the printed total.
 
 **Outstanding owner actions.** If a hosted demo is desired, approve the Render service and disk cost, supply keys privately and complete the restart smoke test. Public batch creation has no per-user quota; limit Gemini quota before sharing. Record and verify the public video, enter the links and team details and submit. There is no tested public application URL or submitted entry in this handoff.
+
+## Final UI revision • The Evidence Desk • November 12
+
+The requester now sees a downloadable synthetic folded receipt on the landing page, then an evidence workspace with a source image, paired readings, highlighted policy findings, review decisions and a settlement ledger. The active workflow link follows persisted task and payment state. For batches with multiple receipts, the selector initially opens a flagged receipt when one exists. The reviewer screen shows only its assigned crop, original proposed total and submission form. All three fonts are served locally with their SIL Open Font Licenses.
+
+| Check | Observed result |
+|---|---|
+| npm test | 12 Chrome regressions passed. Coverage includes approval/cancel/expired/wrong-token returns, duplicate verification, upload and reviewer failure/retry, and keyboard/layout checks. |
+| npm run build | Production Vite build passed, including embedded sample and three local WOFF2 faces (85,252 bytes total). |
+| python -m pytest -q | 33 backend tests passed. One existing Starlette TestClient deprecation warning. |
+| node tests/settlement.mjs | Compiled frontend, real HTTP and isolated SQLite passed upload, review, revision, resubmission, override reason, requester acceptance, final settlement and reload with fixture providers. Checked all four active navigation stages against the fixture workflow. |
+| Responsive evidence | Home, populated requester and crop-only reviewer checked at 1440, 768 and 390 CSS pixels; no page-level horizontal overflow. Desktop and mobile decision and settled states also passed the overflow check. |
+
+[Before and after screenshots](evidence/evidence-desk) include home, requester and reviewer at desktop and mobile widths. The decision and settled PNGs are stamped as browser fixtures with mocked Gemini and PayPal. The original Phase 3 authenticated capture remains the live financial evidence. No new external AI or PayPal transaction ran for this frontend revision. Browser checks used desktop Chrome viewport emulation; physical iOS/Safari and hosted deployment remain untested for this revision.

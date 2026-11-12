@@ -17,6 +17,19 @@ const python = live ? ['-m','uvicorn','api:app','--host','127.0.0.1','--port',St
 if (await fetch(baseURL+'/api/health').catch(()=>null)) throw Error('Test port already in use');
 const server = spawn('python',python,{cwd:'../backend',windowsHide:true,detached:live,stdio:'ignore',
   env:{...process.env,DB_PATH:join(dir,'batch.db'),UPLOAD_DIR:join(dir,'uploads'),APP_PUBLIC_URL:baseURL}});
+// Label fixture evidence in the screenshot itself so it cannot be mistaken for a live charge.
+async function captureFixtureScreens(page, state) {
+  for (const [device, width] of [['desktop',1440], ['mobile',390]]) {
+    await page.setViewportSize({width,height:900});
+    await page.evaluate(()=>document.fonts.ready);
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth <= innerWidth));
+    const label = await page.addStyleTag({content:
+      'body::before{content:"Browser test fixture · mocked Gemini and PayPal";display:block;background:#11191d;color:white;text-align:center;padding:6px;font:12px monospace}'});
+    try {
+      await page.screenshot({path:join(dir,device+'-'+state+'.png'),fullPage:true});
+    } finally {await label.evaluate(el=>el.remove());}
+  }
+}
 let context, handoff=false;
 try {
   for (let i=0;i<150;i++) {
@@ -29,6 +42,8 @@ try {
   await context.route('https://**',r=>r.abort());
   await page.goto('/');
   await page.getByRole('button',{name:'New live batch'}).click();
+  const currentStage = page.getByRole('navigation', {name:'Batch workflow'}).locator('[aria-current="step"]');
+  await expect(currentStage).toContainText('Inspect');
   const image = execFileSync('python',['-c',"import sys;sys.path.insert(0,'tests');from settlement_fixture import receipt;sys.stdout.buffer.write(receipt())"],{cwd:'../backend'});
   await page.getByLabel('Choose a receipt image').setInputFiles({name:'synthetic-discount.png',mimeType:'image/png',buffer:image});
   const upload = page.waitForResponse(r=>r.url().endsWith('/documents'),{timeout:270000});
@@ -42,6 +57,7 @@ try {
   } else {
     assert.equal(batch.tasks.length,1,'Expected one actual rule finding on the printed discount receipt');
     console.log('Review findings:',batch.documents[0].reasons);
+    await expect(currentStage).toContainText('Review');
     const created=page.waitForResponse(r=>r.url().endsWith('/payment/create'));
     await page.getByRole('button',{name:'Create $5 authorization order'}).click();
     const orderResponse=await created;
@@ -69,16 +85,19 @@ try {
       await reviewer.getByRole('button',{name:'Submit verification'}).click();
       const accept=page.getByRole('button',{name:'Accept 30.39'});
       await expect(accept).toBeDisabled();
+      await expect(currentStage).toContainText('Accept');
       await page.getByLabel('Reason for accepting this difference').fill('Printed evidence inspected; approving this service fee.');
+      await captureFixtureScreens(page,'decision');
       await accept.click();
       await expect(page.getByText(/Requester’s reason:/)).toBeVisible();
+      await expect(currentStage).toContainText('Settle');
       page.once('dialog',dialog=>dialog.accept());
       await page.getByRole('button',{name:/Capture \$0.75/}).click();
       await expect(page.getByText('PayPal confirmed the capture of $0.75.')).toBeVisible();
       await page.reload();
       await expect(page.getByText('CAPTURE-MOCK',{exact:true})).toBeVisible();
-      await page.screenshot({path:join(dir,'verified-mock.png'),fullPage:true});
-      console.log('PASS browser upload, authorization, revision, resubmission, auto-refresh, acceptance, settlement and reload (mock providers). Screenshot:',join(dir,'verified-mock.png'));
+      await captureFixtureScreens(page,'settled');
+      console.log('PASS browser upload, authorization, revision, resubmission, auto-refresh, acceptance, settlement and reload (mock providers). Screenshot:',join(dir,'desktop-settled.png'));
     }
   }
 } finally {
