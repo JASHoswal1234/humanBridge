@@ -1,16 +1,33 @@
-# Optional Render deployment
+# Manual Render Free preview
 
-The local installation remains available independently of Render. One native Python web service builds Vite and serves the bundle, API, document routes and payment callbacks. The optional Blueprint proposes Starter compute and a 1 GB disk. A paid service is necessary to attach a disk. The published entry compute price of USD 7/month plus USD 0.25/GB-month gives an indicative USD 7.25/month before taxes, usage or other charges. Review the dashboard's compute and storage charges before authorizing provisioning. [Render persistent disks](https://render.com/docs/disks) · [Current pricing](https://render.com/pricing)
+In the Render dashboard choose **New → Web Service**, connect the public GitHub repository **JASHoswal1234/humanBridge**, and use the following settings.
 
-## Dashboard steps
+| Setting | Value |
+|---|---|
+| Branch | main |
+| Root Directory | Leave blank (repository root) |
+| Language / runtime | Python 3 |
+| Instance type | Free |
+| Build Command | `python -m pip install -r backend/requirements.txt && npm --prefix frontend ci --include=dev && npm --prefix frontend run build` |
+| Start Command | `python -m uvicorn api:app --app-dir backend --host 0.0.0.0 --port $PORT --workers 1 --no-access-log` |
+| Health Check Path | /api/health |
+| Persistent disks / databases / additional services | None |
+| Auto-deploy | Off for manual deployments |
 
-1. Confirm the selected GitHub branch contains render.yaml, the current frontend, and backend. Sign in to Render, select **New → Blueprint**, connect GitHub, select **JASHoswal1234/humanBridge** and choose that branch. Use the repository root and render.yaml.
-2. Inspect the proposed single web service, Starter instance and 1 GB disk mounted at /var/data. Stop at the preview unless you approve the displayed cost.
-3. In the private environment prompts enter GEMINI_API_KEY, PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET. Use only the Sandbox merchant app. GEMINI_MODEL is set to gemini-3.1-flash-lite. These variables stay server-side. No VITE variables or separate static site are needed.
-4. Once approved, apply the Blueprint and wait for the health check. Build and start commands are in [render.yaml](../render.yaml). Render provides PORT and RENDER_EXTERNAL_URL. The app uses the latter for HTTPS cookies and PayPal return/cancel URLs. For a custom domain, set APP_PUBLIC_URL to the exact HTTPS origin before creating an order. Always start and finish checkout on that same hostname.
-5. Verify **Disks** lists the mount, and **Environment** shows DB_PATH=/var/data/humanbridge.db and UPLOAD_DIR=/var/data/uploads. One replica and one worker use the same disk. Do not copy the local merchant ledger, original receipts or owner credentials to the service. The local completed batch remains local.
-6. Open the assigned HTTPS URL in a normal browser. Confirm /api/health responds, then create a live batch, upload the synthetic sample, inspect both readings and refresh. From a private browser confirm the original batch document is inaccessible. Check desktop and phone widths.
-7. Restart the service and reopen the original browser. Confirm both readings AND the preview survive. Check the owner cookie is Secure and HttpOnly. A successful health check alone cannot verify persistence or Gemini.
-8. On a genuinely flagged case inspect the Sandbox approval link and return origin before buyer approval. A redirect needs server verification. Use the previously recorded local capture for financial evidence unless a separate hosted checkout is expressly desired. Record which hosted steps actually ran, URL and date in PROJECT_STATUS.md before sharing. Use the tested local instructions if the hosted smoke test fails.
+Under **Environment** set the variables below, then click **Deploy Web Service**. Render provides PORT and RENDER_EXTERNAL_URL. FastAPI serves the Vite build and relative API routes on the same HTTPS origin. Node and npm are included in the native runtime. [Render native runtimes](https://render.com/docs/native-runtimes)
 
-Manual deploys are configured. Disk-backed services can briefly go offline during redeploy. Avoid redeploying during a judge session. Hosting, provider quota, HTTPS redirects and model availability must be tested on the actual assigned host. [Blueprint fields](https://render.com/docs/blueprint-spec)
+| Key | Value |
+|---|---|
+| HUMANBRIDGE_FREE_PREVIEW | 1 |
+| PYTHON_VERSION | 3.11.14 |
+| NODE_VERSION | 22.18.0 |
+| DB_PATH | /tmp/humanbridge/humanbridge.db |
+| UPLOAD_DIR | /tmp/humanbridge/uploads |
+| GEMINI_MODEL | gemini-3.1-flash-lite |
+| GEMINI_API_KEY | Enter a private Gemini key from a free-tier project with billing disabled |
+
+Leave PayPal credentials unset. Use only the Free instance and included quotas. Use the scripted walkthrough if free Gemini quota is unavailable. The backend disables payments on Render and whenever HUMANBRIDGE_FREE_PREVIEW=1, even if credentials are present. Reviewers can submit values; requesters can compare, request revisions and skip. Paid acceptance and settlement stay in the local Sandbox workflow.
+
+Free services spin down after inactivity. **Uploaded receipts, SQLite records and review links disappear on spin-down, restart or redeploy.** Start a new batch after waking the service. Use synthetic receipts only. [Render Free lifecycle](https://render.com/docs/free)
+
+After deployment open /api/health and /api/config. Confirm free_preview is true and paypal_enabled is false. Open the root page, use New live batch, upload the folded synthetic sample, and inspect both Gemini readings. A flagged result offers a task-scoped review. Confirm the settlement panel says Payments disabled. Share the assigned URL after this check.

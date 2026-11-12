@@ -275,3 +275,28 @@ def test_render_origin_secures_cookie_and_supplies_checkout_origin(monkeypatch):
         assert observed['public_url'] == 'https://example.onrender.com'
     monkeypatch.setenv('APP_PUBLIC_URL', 'https://custom.example/')
     assert api.public_origin() == 'https://custom.example'
+
+@pytest.mark.parametrize('flag,value', [('RENDER','true'), ('HUMANBRIDGE_FREE_PREVIEW','1')])
+def test_ephemeral_preview_blocks_money_and_allows_review(monkeypatch, flag, value):
+    monkeypatch.setenv(flag, value)
+    monkeypatch.setenv('PAYPAL_CLIENT_ID','fixture')
+    monkeypatch.setenv('PAYPAL_CLIENT_SECRET','fixture')
+    monkeypatch.setattr(api, 'paypal_or_503', lambda: pytest.fail('Unexpected PayPal access'))
+    config = client.get('/api/config').json()
+    assert config['free_preview'] and not config['paypal_enabled']
+    batch = client.post('/api/batches/demo').json()
+    root = '/api/batches/' + batch['id']
+    task = batch['tasks'][0]
+    decision = root + '/tasks/' + task['id']
+    review = '/api/tasks/' + task['id']
+    assert client.get(review, headers={'X-Review-Token':task['review_token']}).json()['free_preview']
+    assert client.post(review+'/submit',json={'token':task['review_token'],'value':'32.40'}).is_success
+    for endpoint in ('create','authorize','settle'):
+        assert client.post(root+'/payment/'+endpoint).status_code == 403
+    assert client.get(root+'/payment/approval?token=example').status_code == 403
+    assert client.post(decision+'/accept').status_code == 403
+    assert client.post(decision+'/revise').is_success
+    assert client.post(decision+'/skip').is_success
+    state = client.get(root).json()
+    assert state['payment_status']=='NOT_STARTED' and state['paypal_order_id'] is None
+    assert state['free_preview'] and state['captured_cents']==0

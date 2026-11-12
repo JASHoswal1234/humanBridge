@@ -152,7 +152,7 @@ function Reviewer({id}) {
        <label className="input-label" htmlFor="review-total">Correct receipt total</label>
        <input id="review-total" className="input" value={value} onChange={e=>setValue(e.target.value)}
          placeholder="Enter the printed total" inputMode="decimal" required disabled={busy || locked}/>
-       <div className="review-fee"><CircleDollarSign size={16}/> Verification fee if requester accepts: {fmt(task.fee_cents)}</div>
+       <div className="review-fee"><CircleDollarSign size={16}/> {task.free_preview ? 'Free preview · unpaid review' : 'Verification fee if requester accepts: '+fmt(task.fee_cents)}</div>
        <Button type="submit" disabled={busy || locked || !value.trim()} icon={CheckCircle2}>
          {busy ? 'Submitting…' : task.status === 'SUBMITTED' ? 'Submitted' : 'Submit verification'}
        </Button>
@@ -288,8 +288,10 @@ function App() {
  const accepted=batch?.accepted_cents ?? tasks.reduce((sum,t)=>sum+(t.status==='ACCEPTED'?t.fee_cents:0),0);
  const paid=batch?.captured_cents||0;
  const status=batch?.payment_status;
+ const preview=batch?.free_preview ?? config?.free_preview;
  return <><Header/><main className={'page '+(batch?'workspace':'landing')}>
-   <div className={batch?'batch-head':'cover'}><div className="cover-copy">
+   {preview && <p className="hint">Free preview · Gemini analysis and unpaid review are available. Receipts and batches disappear on sleep, restart or redeploy.</p>}
+   <div className={batch?'batch-head' :'cover'}><div className="cover-copy">
    <div className="eyebrow">{batch?'Requester desk':'Receipt verification'}</div>
    <h1>{batch?'Evidence workspace':<>Know when <br/>to <em>ask.</em></>}</h1>
    {!batch && <p>Two Gemini readings. A human opinion when the evidence calls for one. PayPal settles the reviews you accept.</p>}
@@ -306,7 +308,7 @@ function App() {
      {config?.gemini_enabled===false && status==='NOT_STARTED' &&<p className="hint"><Info size={14}/> Add GEMINI_API_KEY to backend/.env to analyze real uploads. Scripted Demo Batch remains available.</p>}
      {docs.length?<Evidence key={batchId} documents={docs}/>:<div className="empty"><FileText size={27}/><p>No receipts yet. Upload a non-sensitive receipt or download the <a href="/api/sample-receipt" download="sample-stationery.png">synthetic sample receipt</a> to try Gemini.</p></div>}
    </Panel></div>
-   <div className="stack side-desk"><div id="payment"><Panel title="Settlement ledger" eyebrow="PayPal Sandbox" extra={<Status status={status}/>}>
+   <div className="stack side-desk"><div id="payment">{preview ? <Panel title="Payments disabled" eyebrow="Free preview"><p>Temporary storage cannot retain a payment ledger. Submit a review, request a revision or skip a task here.</p></Panel> : <Panel title="Settlement ledger" eyebrow="PayPal Sandbox" extra={<Status status={status}/>}>
       <div className="budget-amount"><span>Approved budget ceiling</span><strong>{fmt(batch.budget_cents)}</strong></div><div className="extract-line"><span>Accepted service fees</span><strong>{fmt(accepted)}</strong></div><div className="budget-numbers">{status==='SETTLING' ? <span>PayPal read-back pending</span> : <><span>Captured {fmt(paid)}</span><span>Not captured {fmt(batch.budget_cents-paid)}</span></>}</div>
       <p className="subtle">PayPal determines when an unused hold clears.</p>
       {status==='NOT_STARTED'&&<Button disabled={tasks.length===0||!!busy} icon={CreditCard} onClick={payCreate}>{busy==='payCreate'?'Creating order…':'Create $'+(batch.budget_cents/100)+' authorization order'}</Button>}
@@ -317,9 +319,9 @@ function App() {
       {status==='CAPTURED'&&<div className="success-hint" role="status"><CheckCircle2 size={17}/> PayPal confirmed the capture of {fmt(batch.captured_cents)}.</div>}
       {status==='VOIDED'&&<div className="success-hint"><CheckCircle2 size={17}/> PayPal confirmed this authorization was voided.</div>}
       {batch.paypal_order_id&&<div className="ledger"><ExtractValue name="Order" value={batch.paypal_order_id}/><ExtractValue name="Authorization" value={batch.paypal_authorization_id||'Waiting'}/><ExtractValue name="Capture" value={batch.paypal_capture_id||'Not captured'}/></div>}
-   </Panel></div>
+   </Panel>}</div>
    <div id="decisions"><Panel title="Review decisions" eyebrow="Review & accept" extra={<Pill>{tasks.length} tasks</Pill>}>
-      {tasks.length===0?<div className="empty"><UserCheck size={25}/><p>No review needed yet.</p></div>:tasks.map((t,i)=>{const d=docs.find(x=>x.id===t.document_id);const link=`/review/${t.id}#token=${encodeURIComponent(t.review_token)}`;return <div className="task" key={t.id}><div className="task-top"><div><small>Review {i+1} · {fmt(t.fee_cents)}</small><strong>{d?.first?.merchant||'Receipt'} · total</strong></div><Status status={t.status}/></div><p className="reason"><AlertTriangle size={14}/> {d?.reasons.join(' · ')}</p><ReviewComparison task={t} currency={d?.first?.currency} reason={reasons[t.id+':'+t.revision] || ''} onReason={v=>setReasons(prev=>({...prev,[t.id+':'+t.revision]:v}))}/><a className="doclink" href={d?.image_url} target="_blank" rel="noreferrer">Inspect receipt evidence</a><div className="task-actions"><Button variant="outline" icon={ExternalLink} onClick={()=>window.open(link,'_blank','noopener,noreferrer')}>Open reviewer</Button>{t.status==='SUBMITTED'&&<Button icon={Check} disabled={status!=='AUTHORIZED'||!!busy||(t.correction_warnings?.length>0 && !reasons[t.id+':'+t.revision]?.trim())} onClick={()=>decide(t,'accept')}>{busy==='decide:'+t.id?'Saving decision…':'Accept '+t.reviewer_value}</Button>}{t.status==='SUBMITTED' && <Button variant="outline" disabled={!!busy} onClick={()=>decide(t,'revise')}>Request revision</Button>}{['PENDING','SUBMITTED','REVISION_REQUESTED'].includes(t.status)&&<Button variant="ghost" disabled={!!busy} onClick={()=>decide(t,'skip')}>Skip</Button>}</div>{t.status==='SUBMITTED'&&status!=='AUTHORIZED'&&<p className="hint">Requester acceptance becomes available after payment authorization.</p>}</div>})}
+      {tasks.length===0?<div className="empty"><UserCheck size={25}/><p>No review needed yet.</p></div>:tasks.map((t,i)=>{const d=docs.find(x=>x.id===t.document_id);const link=`/review/${t.id}#token=${encodeURIComponent(t.review_token)}`;return <div className="task" key={t.id}><div className="task-top"><div><small>Review {i+1} · {preview?'Unpaid preview':fmt(t.fee_cents)}</small><strong>{d?.first?.merchant||'Receipt'} · total</strong></div><Status status={t.status}/></div><p className="reason"><AlertTriangle size={14}/> {d?.reasons.join(' · ')}</p><ReviewComparison task={t} currency={d?.first?.currency} reason={reasons[t.id+':'+t.revision] || ''} onReason={v=>setReasons(prev=>({...prev,[t.id+':'+t.revision]:v}))}/><a className="doclink" href={d?.image_url} target="_blank" rel="noreferrer">Inspect receipt evidence</a><div className="task-actions"><Button variant="outline" icon={ExternalLink} onClick={()=>window.open(link,'_blank','noopener,noreferrer')}>Open reviewer</Button>{!preview&&t.status==='SUBMITTED'&&<Button icon={Check} disabled={status!=='AUTHORIZED'||!!busy||(t.correction_warnings?.length>0 && !reasons[t.id+':'+t.revision]?.trim())} onClick={()=>decide(t,'accept')}>{busy==='decide:'+t.id?'Saving decision…':'Accept '+t.reviewer_value}</Button>}{t.status==='SUBMITTED' && <Button variant="outline" disabled={!!busy} onClick={()=>decide(t,'revise')}>Request revision</Button>}{['PENDING','SUBMITTED','REVISION_REQUESTED'].includes(t.status)&&<Button variant="ghost" disabled={!!busy} onClick={()=>decide(t,'skip')}>Skip</Button>}</div>{!preview&&t.status==='SUBMITTED'&&status!=='AUTHORIZED'&&<p className="hint">Requester acceptance becomes available after payment authorization.</p>}</div>})}
    </Panel></div></div></div>
    <Panel title="Audit trail" eyebrow="Batch activity" extra={<Button variant="ghost" icon={showEvents?X:ClipboardCheck} onClick={()=>setShowEvents(!showEvents)}>{showEvents?'Hide':'Show events'}</Button>}>
       {showEvents&&<div className="events">{batch.events.map((e,i)=><div key={i}><small>{new Date(e.time).toLocaleString()}</small><strong>{e.kind.toLowerCase().replaceAll('_',' ')}</strong><small>{e.details.capture_id || e.details.authorization_id || e.details.order_id || e.details.reason || ''}</small></div>)}</div>}

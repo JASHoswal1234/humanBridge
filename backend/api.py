@@ -27,6 +27,15 @@ from ai_engine import correction_warnings, analyze, crop_receipt, read_receipt
 from demo_data import DEMO, make_image
 from paypal_client import PayPalSandbox, PayPalError, stable_id
 
+def free_preview():
+    return os.getenv('RENDER') == 'true' or os.getenv('HUMANBRIDGE_FREE_PREVIEW', '0') != '0'
+
+
+def require_payment_mode():
+    if free_preview():
+        raise HTTPException(403, 'Payments are disabled in this temporary free preview.')
+
+
 def public_origin():
     return (os.getenv('APP_PUBLIC_URL') or os.getenv('RENDER_EXTERNAL_URL') or '').rstrip('/')
 
@@ -238,7 +247,7 @@ def get_batch_state(batch_id):
     return {
         'id': batch['id'], 'created_at': batch['created_at'], 'data_mode': batch['data_mode'],
         'payment_status': batch['payment_status'], 'budget_cents': BUDGET_CENTS, 'verified_cents':batch['verified_cents'], 'auth_currency':batch['auth_currency'], 'auth_status':batch['auth_status'],
-        'accepted_cents': sum(t['fee_cents'] for t in tasks if t['status']=='ACCEPTED'),
+        'free_preview': free_preview(), 'accepted_cents': sum(t['fee_cents'] for t in tasks if t['status']=='ACCEPTED'),
         'captured_cents': batch['captured_cents'], 'paypal_order_id': batch['paypal_order_id'],
         'paypal_approval_url': batch['paypal_approval_url'],
         'paypal_authorization_id': batch['paypal_authorization_id'],
@@ -257,7 +266,7 @@ def health():
 @app.get('/api/config')
 def config():
     return {'sandbox_only': True, 'gemini_enabled': bool(os.getenv('GEMINI_API_KEY')),
-            'paypal_enabled': bool(os.getenv('PAYPAL_CLIENT_ID') and os.getenv('PAYPAL_CLIENT_SECRET')),
+            'free_preview': free_preview(), 'paypal_enabled': not free_preview() and bool(os.getenv('PAYPAL_CLIENT_ID') and os.getenv('PAYPAL_CLIENT_SECRET')),
             'budget_cents': BUDGET_CENTS, 'fee_cents': REVIEW_CENTS}
 
 
@@ -377,7 +386,7 @@ def verify_authorization(auth, auth_id, unit):
         raise HTTPException(409,'PayPal authorization ID, amount or currency mismatch')
 
 
-@owner.post('/api/batches/{batch_id}/payment/create')
+@owner.post('/api/batches/{batch_id}/payment/create', dependencies=[Depends(require_payment_mode)])
 def payment_create(batch_id: str, request: Request):
     with connect() as db:
         db.execute("BEGIN IMMEDIATE")
@@ -412,7 +421,7 @@ def payment_create(batch_id: str, request: Request):
     return {'order_id': order['id'], 'approval_url': approval_url, 'payment_status': 'AWAITING_BUYER'}
 
 
-@owner.get('/api/batches/{batch_id}/payment/approval')
+@owner.get('/api/batches/{batch_id}/payment/approval', dependencies=[Depends(require_payment_mode)])
 def payment_approval(batch_id: str, token: str):
     with connect() as db:
         batch = require_batch(db, batch_id)
@@ -431,7 +440,7 @@ def payment_approval(batch_id: str, token: str):
     return {'status':status}
 
 
-@owner.post('/api/batches/{batch_id}/payment/authorize')
+@owner.post('/api/batches/{batch_id}/payment/authorize', dependencies=[Depends(require_payment_mode)])
 def payment_authorize(batch_id: str, token: str | None = None):
     with connect() as db:
         db.execute("BEGIN IMMEDIATE")
@@ -493,7 +502,7 @@ def get_task(task_id: str, response: Response, token: str = Query(''), x_review_
         doc = db.execute('SELECT * FROM documents WHERE id=?', (task['document_id'],)).fetchone()
     response.set_cookie('hb_review',token,path=f'/api/tasks/{task_id}/',httponly=True,secure=public_origin().startswith('https://'),samesite='strict')
     response.headers['Cache-Control'] = 'no-store'
-    return {'id': task_id, 'revision':task['revision'], 'check_status':task['check_status'], 'field': task['field'],
+    return {'id': task_id, 'free_preview':free_preview(), 'revision':task['revision'], 'check_status':task['check_status'], 'field': task['field'],
             'proposed_value': task['proposed_value'], 'reviewer_value': task['reviewer_value'],
             'status': task['status'], 'fee_cents': task['fee_cents'],
             'crop_url': f"/api/tasks/{task_id}/receipt-crop.png", 'mode': doc['data_mode']}
@@ -529,7 +538,7 @@ class Acceptance(BaseModel):
     reason: str = ''
 
 
-@owner.post('/api/batches/{batch_id}/tasks/{task_id}/accept')
+@owner.post('/api/batches/{batch_id}/tasks/{task_id}/accept', dependencies=[Depends(require_payment_mode)])
 def accept_task(batch_id: str, task_id: str, revision: int = 0, decision: Acceptance | None = None):
     with connect() as db:
         db.execute("BEGIN IMMEDIATE")
@@ -582,7 +591,7 @@ def skip_task(batch_id: str, task_id: str):
     return get_batch_state(batch_id)
 
 
-@owner.post('/api/batches/{batch_id}/payment/settle')
+@owner.post('/api/batches/{batch_id}/payment/settle', dependencies=[Depends(require_payment_mode)])
 def settle_payment(batch_id: str):
     with connect() as db:
         db.execute("BEGIN IMMEDIATE")

@@ -150,3 +150,9 @@ The requester now sees a downloadable synthetic folded receipt on the landing pa
 | Responsive evidence | Home, populated requester and crop-only reviewer checked at 1440, 768 and 390 CSS pixels; no page-level horizontal overflow. Desktop and mobile decision and settled states also passed the overflow check. |
 
 [Before and after screenshots](evidence/evidence-desk) include home, requester and reviewer at desktop and mobile widths. The decision and settled PNGs are stamped as browser fixtures with mocked Gemini and PayPal. The original Phase 3 authenticated capture remains the live financial evidence. No new external AI or PayPal transaction ran for this frontend revision. Browser checks used desktop Chrome viewport emulation; physical iOS/Safari and hosted deployment remain untested for this revision.
+
+## Native Render Free preview • November 12
+
+Prepared a single Python web service with a Vite production build, one FastAPI worker, ephemeral SQLite and uploaded images under /tmp/humanbridge. This free configuration supersedes the earlier paid-disk proposal. Receipts, tasks and batches disappear on sleep, restart or redeploy. The server blocks order creation, approval lookup, authorization, paid acceptance and settlement in preview mode. Local Sandbox payment behavior remains covered by the existing mocked tests.
+
+Verification: 35 backend tests passed (one existing Starlette warning), 12 Chrome regressions passed, and the Vite production build passed. An additional Chrome smoke test opened the compiled application in preview mode, saw the disabled payment panel, submitted an unpaid scripted review and observed it on the requester page. Live hosted Gemini and the public Render URL await deployment. [Manual dashboard settings](RENDER.md)
